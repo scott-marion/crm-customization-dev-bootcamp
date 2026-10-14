@@ -6,7 +6,7 @@ You will start using it during weeks 2 - 6. You will need to **fork** this repo.
 ## Bootcamp
 If you found this repo and you're interested in signing up for the bootcamp, you can find more details here.
 
-[Click here](https://www.hubspot.com/academy/bootcamps/crmcb) to learn more about the HubSpot Academy CRM Customization Bootcamp for Developers.
+[Click here](https://academy.hubspot.com/courses/crm-customization-bootcamp-for-developers-en) to learn more about the HubSpot Academy CRM Customization Bootcamp for Developers.
 
 ## Help
 Join and subscribe to the [HubSpot Developer Community](https://community.hubspot.com/c/develop-build-integrate/58) if you haven't already!
