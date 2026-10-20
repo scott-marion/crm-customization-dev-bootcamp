@@ -18,6 +18,7 @@ import {
   Tile,
   hubspot,
 } from "@hubspot/ui-extensions";
+import { useCrmProperties } from "@hubspot/ui-extensions/crm";
 import { DataTable } from "hs-uix/datatable";
 import { FormBuilder } from "hs-uix/form";
 import { formatCurrency, formatDate } from "hs-uix/utils";
@@ -37,6 +38,9 @@ import {
 //
 // Flow: Recommend → Offer (booking panel) → Create rental → Booked.
 
+// First slice: the customer's name is read from the contact record.
+const CONTACT_PROPERTIES = ["firstname", "lastname"];
+
 const VIEW_MODES = [
   { value: "recommend", label: "Recommend" },
   { value: "booked", label: "Booked" },
@@ -45,9 +49,24 @@ const VIEW_MODES = [
   { value: "empty", label: "Empty" },
 ];
 
+const toDate = (d) => (d ? new Date(d.year, d.month, d.date) : null);
+
+const returnAfterPickup = (returnDate, { pickupDate }) => {
+  const start = toDate(pickupDate);
+  const end = toDate(returnDate);
+  if (!start || !end) return true;
+  return end > start ? true : "Return date must be after the pickup date";
+};
+
 const BOOKING_FIELDS = [
   { name: "pickupDate", type: "date", label: "Pickup date", required: true },
-  { name: "returnDate", type: "date", label: "Return date", required: true },
+  {
+    name: "returnDate",
+    type: "date",
+    label: "Return date",
+    required: true,
+    validators: [returnAfterPickup],
+  },
   {
     name: "insurance",
     type: "toggle",
@@ -64,8 +83,6 @@ const INITIAL_BOOKING_VALUES = {
   insurance: false,
   notes: "",
 };
-
-const toDate = (d) => (d ? new Date(d.year, d.month, d.date) : null);
 
 const countDays = (pickup, dropoff) => {
   const start = toDate(pickup);
@@ -95,13 +112,17 @@ const Extension = ({ sendAlert, closeOverlay }) => {
   const [viewMode, setViewMode] = useState("recommend");
   const [booking, setBooking] = useState(MOCK_BOOKING);
   const [confirmationSent, setConfirmationSent] = useState(false);
+  const { properties, isLoading } = useCrmProperties(CONTACT_PROPERTIES);
+  const customerName = isLoading
+    ? "…"
+    : `${properties.firstname ?? ""} ${properties.lastname ?? ""}`.trim() || "--";
 
   const createRental = (vehicle, values, panelId) => {
     setBooking({ ...MOCK_BOOKING, vehicle, ...values });
     setConfirmationSent(false);
     setViewMode("booked");
     closeOverlay(panelId);
-    sendAlert({ type: "success", message: `Rental ${MOCK_BOOKING.agreementId} created for ${MOCK_CUSTOMER.name}.` });
+    sendAlert({ type: "success", message: `Rental ${MOCK_BOOKING.agreementId} created for ${customerName}.` });
   };
 
   const sendConfirmation = () => {
@@ -112,6 +133,7 @@ const Extension = ({ sendAlert, closeOverlay }) => {
   const bookingPanel = (vehicle) => (
     <BookingPanel
       vehicle={vehicle}
+      customerName={customerName}
       onCreate={createRental}
       closeOverlay={closeOverlay}
     />
@@ -169,7 +191,7 @@ const Extension = ({ sendAlert, closeOverlay }) => {
     <Flex direction="column" gap="sm">
       <DescriptionList direction="row">
         <DescriptionListItem label="Customer">
-          <Text>{MOCK_CUSTOMER.name}</Text>
+          <Text>{customerName}</Text>
         </DescriptionListItem>
         <DescriptionListItem label="Usually rents">
           <Text>{MOCK_CUSTOMER.usualRentalLabel}</Text>
@@ -263,7 +285,7 @@ const RecommendView = ({ topPick, alternatives, bookingPanel }) => {
 
 // Opens when the rep offers a vehicle and the customer says yes.
 // "Create rental" is what will write the Rental Agreement record in Week 3.
-const BookingPanel = ({ vehicle, onCreate, closeOverlay }) => {
+const BookingPanel = ({ vehicle, customerName, onCreate, closeOverlay }) => {
   const panelId = `book-${vehicle.id}`;
   const formRef = useRef();
   const [values, setValues] = useState(INITIAL_BOOKING_VALUES);
@@ -275,7 +297,7 @@ const BookingPanel = ({ vehicle, onCreate, closeOverlay }) => {
         <Flex direction="column" gap="md">
           <DescriptionList direction="row">
             <DescriptionListItem label="Customer">
-              <Text>{MOCK_CUSTOMER.name}</Text>
+              <Text>{customerName}</Text>
             </DescriptionListItem>
             <DescriptionListItem label="Vehicle">
               <Text>{vehicle.vehicleName}</Text>
