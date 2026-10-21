@@ -1,0 +1,8 @@
+{
+  "uid": "echo",
+  "type": "app-function",
+  "config": {
+    "entrypoint": "/app/functions/echo.js",
+    "secretKeys": []
+  }
+}

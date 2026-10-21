@@ -1,0 +1,8 @@
+{
+  "uid": "getPickupWeather",
+  "type": "app-function",
+  "config": {
+    "entrypoint": "/app/functions/getPickupWeather.js",
+    "secretKeys": []
+  }
+}

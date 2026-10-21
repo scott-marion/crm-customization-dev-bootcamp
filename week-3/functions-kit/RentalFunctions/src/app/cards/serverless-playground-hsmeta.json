@@ -1,0 +1,11 @@
+{
+  "uid": "serverless_playground_card",
+  "type": "card",
+  "config": {
+    "name": "Serverless Playground",
+    "description": "Week 3: call three serverless functions from one card and see exactly what goes in and what comes back.",
+    "location": "crm.record.tab",
+    "entrypoint": "/app/cards/ServerlessPlayground.jsx",
+    "objectTypes": ["contacts"]
+  }
+}

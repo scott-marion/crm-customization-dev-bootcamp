@@ -1,0 +1,24 @@
+{
+  "uid": "serverless_playground",
+  "type": "app",
+  "config": {
+    "name": "Serverless Playground (Week 3)",
+    "description": "Week 3 scaffold: one card, three serverless functions. Shows the card-to-function handshake, an external API call with Axios, and a HubSpot API call with Axios.",
+    "distribution": "private",
+    "auth": {
+      "type": "static",
+      "requiredScopes": [
+        "oauth",
+        "crm.objects.contacts.read",
+        "crm.objects.custom.read"
+      ],
+      "optionalScopes": [],
+      "conditionallyRequiredScopes": []
+    },
+    "permittedUrls": {
+      "fetch": [],
+      "iframe": [],
+      "img": []
+    }
+  }
+}

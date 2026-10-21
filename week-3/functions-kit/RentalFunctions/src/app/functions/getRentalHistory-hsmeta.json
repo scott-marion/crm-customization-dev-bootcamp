@@ -1,0 +1,8 @@
+{
+  "uid": "getRentalHistory",
+  "type": "app-function",
+  "config": {
+    "entrypoint": "/app/functions/getRentalHistory.js",
+    "secretKeys": []
+  }
+}
