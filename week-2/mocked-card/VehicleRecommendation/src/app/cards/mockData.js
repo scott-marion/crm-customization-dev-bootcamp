@@ -3,8 +3,9 @@
 // In the "first slice" step you replace one value at a time with real data
 // and delete it from here. When this file is empty, the card is built.
 
+// The customer's name is real now: it comes from the contact record
+// (useCrmProperties in VehicleRecommendation.jsx).
 export const MOCK_CUSTOMER = {
-  name: "Jordan Rivera",
   email: "jordan.rivera@example.com",
   usualRentalLabel: "Midsize, $95/day (3 rentals)",
 };
