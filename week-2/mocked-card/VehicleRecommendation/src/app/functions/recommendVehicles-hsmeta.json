@@ -1,0 +1,8 @@
+{
+  "uid": "recommendVehicles",
+  "type": "app-function",
+  "config": {
+    "entrypoint": "/app/functions/recommendVehicles.js",
+    "secretKeys": []
+  }
+}

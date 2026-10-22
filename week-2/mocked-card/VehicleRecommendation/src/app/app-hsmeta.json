@@ -9,7 +9,8 @@
       "type": "static",
       "requiredScopes": [
         "oauth",
-        "crm.objects.contacts.read"
+        "crm.objects.contacts.read",
+        "crm.objects.custom.read"
       ],
       "optionalScopes": [],
       "conditionallyRequiredScopes": []

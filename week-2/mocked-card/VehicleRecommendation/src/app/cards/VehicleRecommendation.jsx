@@ -1,4 +1,4 @@
-import React, { useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   Box,
   Button,
@@ -9,6 +9,7 @@ import {
   ErrorState,
   Flex,
   Inline,
+  Input,
   LoadingSpinner,
   Panel,
   PanelBody,
@@ -22,24 +23,17 @@ import { useCrmProperties } from "@hubspot/ui-extensions/crm";
 import { DataTable } from "hs-uix/datatable";
 import { FormBuilder } from "hs-uix/form";
 import { formatCurrency, formatDate } from "hs-uix/utils";
-import {
-  MOCK_ALTERNATIVES,
-  MOCK_BOOKING,
-  MOCK_CUSTOMER,
-  MOCK_INSURANCE_PER_DAY,
-  MOCK_LOCATION,
-  MOCK_TOP_PICK,
-  MOCK_TRIP,
-} from "./mockData";
+import { MOCK_BOOKING, MOCK_CUSTOMER, MOCK_INSURANCE_PER_DAY, MOCK_TRIP } from "./mockData";
+import { useFunction } from "./useFunction";
 
-// Week 2 mockup: no functions, no API calls. Every value comes from
-// mockData.js so you can put this in front of a rep and change the design
-// in minutes. Wire up real data one slice at a time once the design holds.
+// Started as the Week 2 mockup. Real data replaces mockData.js one slice
+// at a time; whatever is still in mockData.js is still fake.
 //
 // Flow: Recommend → Offer (booking panel) → Create rental → Booked.
 
-// First slice: the customer's name is read from the contact record.
-const CONTACT_PROPERTIES = ["firstname", "lastname"];
+// The customer's name, and the zip that prefills the pickup zip.
+const CONTACT_PROPERTIES = ["firstname", "lastname", "zip"];
+const ZIP_PATTERN = /^\d{5}$/;
 
 const VIEW_MODES = [
   { value: "recommend", label: "Recommend" },
@@ -104,21 +98,79 @@ const priceBooking = ({ vehicle, pickupDate, returnDate, insurance }) => {
   };
 };
 
-hubspot.extend(({ actions }) => (
-  <Extension sendAlert={actions.addAlert} closeOverlay={actions.closeOverlay} />
+// Trip dates are still mocked, so trip totals use the mocked trip length.
+const TRIP_DAYS = countDays(MOCK_TRIP.pickupDate, MOCK_TRIP.returnDate);
+
+const withPriceLabels = (vehicle) => {
+  const daily = `${formatCurrency(vehicle.dailyPrice)}/day`;
+  const total = formatCurrency(vehicle.dailyPrice * TRIP_DAYS);
+  return { ...vehicle, priceLabel: daily, totalLabel: total, summaryLabel: `${daily} · ${total} total` };
+};
+
+// e.g. "SUV, Van · up to $150/day (2 rentals)". Priciest class first.
+const usualRentalLabel = (customer) => {
+  if (!customer) return "--";
+  if (customer.rentals === 0) return "No rental history";
+  const classes = customer.rentedClasses.join(", ");
+  const price = customer.targetDailyPrice != null ? `up to ${formatCurrency(customer.targetDailyPrice)}/day` : "";
+  const rentals = `${customer.rentals} rental${customer.rentals === 1 ? "" : "s"}`;
+  return `${[classes, price].filter(Boolean).join(" · ") || "--"} (${rentals})`;
+};
+
+const locationLabel = (location) => (location ? `${location.name} (${location.distanceMiles} mi)` : "--");
+
+hubspot.extend(({ context, actions }) => (
+  <Extension
+    contactId={context.crm.objectId}
+    sendAlert={actions.addAlert}
+    closeOverlay={actions.closeOverlay}
+  />
 ));
 
-const Extension = ({ sendAlert, closeOverlay }) => {
+const Extension = ({ contactId, sendAlert, closeOverlay }) => {
   const [viewMode, setViewMode] = useState("recommend");
   const [booking, setBooking] = useState(MOCK_BOOKING);
   const [confirmationSent, setConfirmationSent] = useState(false);
+  const [zip, setZip] = useState("");
   const { properties, isLoading } = useCrmProperties(CONTACT_PROPERTIES);
+  const recommendation = useFunction("recommendVehicles");
+  // Same function without a zip: rental history only, loaded with the card.
+  const history = useFunction("recommendVehicles");
   const customerName = isLoading
     ? "…"
     : `${properties.firstname ?? ""} ${properties.lastname ?? ""}`.trim() || "--";
 
+  const findVehicles = (pickupZip) => {
+    if (ZIP_PATTERN.test(pickupZip)) {
+      recommendation.call({ parameters: { contactId, zip: pickupZip } });
+    }
+  };
+
+  useEffect(() => {
+    history.call({ parameters: { contactId } });
+  }, [contactId]);
+
+  // Prefill the pickup zip from the contact once, and search right away.
+  useEffect(() => {
+    if (isLoading) return;
+    const contactZip = String(properties.zip ?? "").trim().slice(0, 5);
+    if (ZIP_PATTERN.test(contactZip)) {
+      setZip(contactZip);
+      findVehicles(contactZip);
+    }
+  }, [isLoading]);
+
+  const result = recommendation.data;
+  const location = result?.location ?? null;
+  const zipIsValid = ZIP_PATTERN.test(zip);
+  // Flag only what can't become a zip (letters, too long); partial input is fine.
+  const zipHasError = !/^\d{0,5}$/.test(zip);
+  // Latest history wins: a search returns it too, in case it changed since load.
+  const customer = result?.customer ?? history.data?.customer;
+  const usualRentsLabel = history.isLoading && !customer ? "…" : history.error && !customer ? "--" : usualRentalLabel(customer);
+
   const createRental = (vehicle, values, panelId) => {
-    setBooking({ ...MOCK_BOOKING, vehicle, ...values });
+    setBooking({ ...MOCK_BOOKING, vehicle, locationName: location?.name ?? "--", ...values });
     setConfirmationSent(false);
     setViewMode("booked");
     closeOverlay(panelId);
@@ -134,6 +186,7 @@ const Extension = ({ sendAlert, closeOverlay }) => {
     <BookingPanel
       vehicle={vehicle}
       customerName={customerName}
+      locationName={location?.name ?? "--"}
       onCreate={createRental}
       closeOverlay={closeOverlay}
     />
@@ -178,11 +231,48 @@ const Extension = ({ sendAlert, closeOverlay }) => {
       );
     }
 
+    // Recommend: real data from the recommendVehicles function.
+    if (recommendation.status === "idle") {
+      return (
+        <EmptyState title="Enter a pickup zip" layout="vertical" reverseOrder={false}>
+          <Text>Ask where the customer wants to pick up, then find vehicles at the nearest location.</Text>
+        </EmptyState>
+      );
+    }
+
+    // Spinner only on the first search; a re-search keeps the current results on screen.
+    if (recommendation.isLoading && !result) {
+      return (
+        <Flex direction="row" justify="center">
+          <LoadingSpinner label="Finding vehicles..." layout="centered" showLabel={true} />
+        </Flex>
+      );
+    }
+
+    if (recommendation.status === "error") {
+      return (
+        <ErrorState title="Trouble loading vehicles.">
+          <Text>{recommendation.error}</Text>
+          <Button variant="secondary" onClick={() => findVehicles(zip)}>
+            Try again
+          </Button>
+        </ErrorState>
+      );
+    }
+
+    if (!result?.topPick) {
+      return (
+        <EmptyState title="No vehicles available" layout="vertical" reverseOrder={false}>
+          <Text>No vehicles are available at the locations nearest this zip.</Text>
+        </EmptyState>
+      );
+    }
+
     return (
       <RecommendView
         bookingPanel={bookingPanel}
-        alternatives={MOCK_ALTERNATIVES}
-        topPick={MOCK_TOP_PICK}
+        alternatives={result.alternatives.map(withPriceLabels)}
+        topPick={withPriceLabels(result.topPick)}
       />
     );
   };
@@ -194,21 +284,46 @@ const Extension = ({ sendAlert, closeOverlay }) => {
           <Text>{customerName}</Text>
         </DescriptionListItem>
         <DescriptionListItem label="Usually rents">
-          <Text>{MOCK_CUSTOMER.usualRentalLabel}</Text>
+          <Text>{usualRentsLabel}</Text>
         </DescriptionListItem>
         <DescriptionListItem label="Trip">
           <Text>{MOCK_TRIP.label}</Text>
         </DescriptionListItem>
         <DescriptionListItem label="Nearest location">
-          <Text>{MOCK_LOCATION.label}</Text>
+          <Text>{locationLabel(location)}</Text>
         </DescriptionListItem>
       </DescriptionList>
+
+      <Flex direction="row" align="end" gap="sm">
+        <Box flex={1}>
+          <Input
+            name="pickupZip"
+            label="Pickup zip"
+            value={zip}
+            onInput={setZip}
+            description="5-digit US zip code"
+            error={zipHasError}
+          />
+        </Box>
+        <Box flex="none">
+          <Button
+            variant="secondary"
+            disabled={!zipIsValid || recommendation.isLoading}
+            onClick={() => {
+              setViewMode("recommend");
+              findVehicles(zip);
+            }}
+          >
+            {recommendation.isLoading ? "Finding…" : "Find vehicles"}
+          </Button>
+        </Box>
+      </Flex>
 
       {renderBody()}
 
       <Divider />
       <Flex direction="row" justify="between" align="center" wrap="wrap" gap="sm">
-        <Text variant="microcopy">Mockup: sample data, nothing is connected yet.</Text>
+        <Text variant="microcopy">Partly mocked: trip dates, insurance and booking are still sample data.</Text>
         <Inline gap="xs">
           {VIEW_MODES.map((mode) => (
             <Button
@@ -252,7 +367,7 @@ const RecommendView = ({ topPick, alternatives, bookingPanel }) => {
             <Flex direction="column" gap="xs">
               <Text variant="microcopy">Recommended</Text>
               <Text format={{ fontWeight: "demibold" }}>{topPick.vehicleName}</Text>
-              <Text>{topPick.priceLabel}</Text>
+              <Text>{topPick.summaryLabel}</Text>
               <Inline gap="sm">
                 {topPick.reasons.map((reason) => (
                   <StatusTag key={reason} variant="success">
@@ -285,7 +400,7 @@ const RecommendView = ({ topPick, alternatives, bookingPanel }) => {
 
 // Opens when the rep offers a vehicle and the customer says yes.
 // "Create rental" is what will write the Rental Agreement record in Week 3.
-const BookingPanel = ({ vehicle, customerName, onCreate, closeOverlay }) => {
+const BookingPanel = ({ vehicle, customerName, locationName, onCreate, closeOverlay }) => {
   const panelId = `book-${vehicle.id}`;
   const formRef = useRef();
   const [values, setValues] = useState(INITIAL_BOOKING_VALUES);
@@ -303,7 +418,7 @@ const BookingPanel = ({ vehicle, customerName, onCreate, closeOverlay }) => {
               <Text>{vehicle.vehicleName}</Text>
             </DescriptionListItem>
             <DescriptionListItem label="Pickup location">
-              <Text>{MOCK_LOCATION.name}</Text>
+              <Text>{locationName}</Text>
             </DescriptionListItem>
           </DescriptionList>
 
@@ -363,7 +478,7 @@ const BookedView = ({ booking, confirmationSent, onSendConfirmation, onViewAgree
               </Inline>
               <Text format={{ fontWeight: "demibold" }}>{booking.vehicle.vehicleName}</Text>
               <Text>
-                {price.datesLabel} · {MOCK_LOCATION.name}
+                {price.datesLabel} · {booking.locationName}
               </Text>
             </Flex>
           </Box>
