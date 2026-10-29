@@ -16,15 +16,22 @@ export function useFunction(uid) {
     // spinner and back (that height change makes the record page jump).
     setState((prev) => ({ status: "loading", data: prev.data, error: null }));
     try {
-      const result = await hubspot.serverless(uid, options);
-      if (result && result.statusCode >= 400) {
-        throw new Error(result.body?.error ?? `${uid} returned ${result.statusCode}`);
-      }
-      setState({ status: "loaded", data: result?.body ?? result, error: null });
+      setState({ status: "loaded", data: await callFunction(uid, options), error: null });
     } catch (err) {
       setState({ status: "error", data: null, error: err.message ?? String(err) });
     }
   };
 
   return { ...state, call, isLoading: state.status === "loading" };
+}
+
+// One-off call without hook state, for actions like Create rental where the
+// caller handles its own pending and error UI. Resolves to the body; throws
+// with the function's own message on a statusCode of 400 or above.
+export async function callFunction(uid, options = {}) {
+  const result = await hubspot.serverless(uid, options);
+  if (result && result.statusCode >= 400) {
+    throw new Error(result.body?.error ?? `${uid} returned ${result.statusCode}`);
+  }
+  return result?.body ?? result;
 }

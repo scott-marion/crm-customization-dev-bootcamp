@@ -11,7 +11,7 @@ AI can write UI extension code faster than you can type it. What it can't do is 
 | [`problem-brief.md`](problem-brief.md) | Template for the problem brief, plus a filled example for the rental rep |
 | [`build-plan.md`](build-plan.md) | Checklist that turns an approved mockup into a build plan (this becomes your Week 3 prompt) |
 | [`prompts.md`](prompts.md) | The Claude Code prompts for each stage, ready to copy |
-| [`mocked-card/`](mocked-card/VehicleRecommendation) | Started as a static card with hardcoded data and no functions: what a good mockup looks like. In this fork it's now partly real (see the end of step 4), and the project also has a Fleet availability app page (Week 4). |
+| [`mocked-card/`](mocked-card/VehicleRecommendation) | Started as a static card with hardcoded data and no functions: what a good mockup looks like. In this fork it's now partly real (see the end of step 4), and the project also has Fleet availability and Rental agreements app pages (Week 4). |
 | [`one-shot/`](one-shot/) | A card Claude Code built from one prompt with no design work. Compare it with the mockup. |
 | [`../.claude/skills/hubspot-card-design`](../.claude/skills/hubspot-card-design/SKILL.md) | Claude Code skill with HubSpot's card design rules and the `hs-uix` components. Use it whenever you mock or build a card. |
 
@@ -75,19 +75,21 @@ Those are the card's real requirements. They often aren't what the user said in 
 
 ### 4. Mock it
 
-Build a **static** card: hardcoded data, HubSpot UI components and [`hs-uix`](https://github.com/05bmckay/hs-uix) only, no serverless functions, no API calls. If you're using Claude Code in this repo, the `hubspot-card-design` skill loads on its own and keeps the mockup looking like HubSpot. Ask it to "review this card against the hubspot-card-design rules" when you're done. See [`mocked-card/`](mocked-card/VehicleRecommendation) for an example. It has a Recommend / Booked / Loading / Error / Empty toggle at the bottom so the user can react to every state, not just the happy path. Its data lives in [`mockData.js`](mocked-card/VehicleRecommendation/src/app/cards/mockData.js), except what has been sliced in so far:
+Build a **static** card: hardcoded data, HubSpot UI components and [`hs-uix`](https://github.com/05bmckay/hs-uix) only, no serverless functions, no API calls. If you're using Claude Code in this repo, the `hubspot-card-design` skill loads on its own and keeps the mockup looking like HubSpot. Ask it to "review this card against the hubspot-card-design rules" when you're done. See [`mocked-card/`](mocked-card/VehicleRecommendation) for an example. As a mockup it had a Recommend / Booked / Loading / Error / Empty toggle at the bottom so the user could react to every state, not just the happy path. In this fork the toggle is gone (Week 4): the real loading, error and empty states come from the data, and Booked appears after Create rental. The card is also split into reusable pieces (Week 4): `VehicleRecommendation.jsx` keeps the state and data calls, the parts it renders live in `cards/components/` (customer summary, zip search, recommendation, booking panel, booked view, a shared price summary, and the loading / error / empty states), and the price math is in `cards/lib/pricing.js`. Its data lives in [`mockData.js`](mocked-card/VehicleRecommendation/src/app/cards/mockData.js), except what has been sliced in so far:
 
 - The customer's name comes from the contact record (the first slice in step 6).
 - The Week 3 slice: the `recommendVehicles` function ([`src/app/functions/`](mocked-card/VehicleRecommendation/src/app/functions)) supplies the rental history ("Usually rents"), the nearest location to a pickup zip (prefilled from the contact's zip), the top pick and the alternatives. Top picks are priced at or above the location's median. With history, they lean to the class and price of the customer's priciest past rental. The app now needs `crm.objects.custom.read`.
+- The write-back: **Create rental** calls the `createRental` function, which creates a real Rental Agreement (name like `RA-Johnson-2026-11-02`, dates, days, cost per day, insurance) and links it to the contact and the vehicle. It charges the vehicle's current price from HubSpot, refuses a vehicle that's no longer available, and shows any error inline in the booking panel. The rep can offer the recommended vehicle or select one of the alternatives first. The app now also needs `crm.objects.custom.write`.
 
-Trip dates, insurance, the confirmation email and the booking itself are still mocked.
+The Trip line in the header, the insurance rate, the location notes (there's no property for them) and the confirmation email are still mocked. Booking doesn't mark the vehicle unavailable yet.
 
-The same project has a Week 4 app page, **Fleet availability** ([`src/app/pages/`](mocked-card/VehicleRecommendation/src/app/pages)). Fleet-wide questions don't fit on a contact card, so they get a full page:
+The same project has Week 4 app pages ([`src/app/pages/`](mocked-card/VehicleRecommendation/src/app/pages)). Business-wide questions don't fit on a contact card, so they get full pages, with a header to move between them:
 
-- `/` lists every location with its available and total vehicles and a status (Available, Low at 2 or fewer, Sold out), with search and state/status filters.
+- `/` (**Fleet availability**) lists every location with its available and total vehicles and a status (Available, Low at 2 or fewer, Sold out), with search and state/status filters.
 - `/locations/:locationId` shows one location's vehicles (class, VIN, odometer, daily price, available or rented) and its median available price.
+- `/rentals` (**Rental agreements**) lists agreements with a link to each contact's record, plus vehicle, dates, daily price, total and status (Active, Upcoming, Ended). It shows Current (active or upcoming) by default; the Show filter switches to Ended or All.
 
-The `fleetAvailability` function does the counting and sorting, so the page only renders. It needs no new scopes. Open the page from the Marketplace menu (recently visited apps) or at `https://app.hubspot.com/app/{hubId}/{appId}`.
+The `fleetAvailability` and `rentalAgreements` functions do the counting, status and sorting, so the pages only render. They need no new scopes. Open the page from the Marketplace menu (recently visited apps) or at `https://app.hubspot.com/app/{hubId}/{appId}`.
 
 Run `hs project dev`, open a contact record, and put the card in front of the user. Card edits hot-reload, so you can change the design while they watch. Do at least two rounds of changes based on what they say.
 
@@ -133,6 +135,7 @@ Each room picks its own card idea, writes a problem brief, and gets a **mocked**
 | Card missing from the card library | App uploaded but not installed | Distribution tab → install, then Customize |
 | Card still missing after install | Record view was customized before | Add the card to the view manually; new cards don't appear on their own |
 | Scope error on upload | `objectTypes` added without a matching scope in `app-hsmeta.json` | Add the scope (e.g. `crm.objects.companies.read`) and upload again |
+| Function returns 403 / "Missing scope" right after you added a scope and uploaded | The installed app still has the old scopes; upload doesn't ask you to approve new ones | Reinstall the app (Distribution tab). In our test the reinstall didn't list the new scope either; it just reported success |
 | Function change not showing in `hs project dev` | Functions don't hot-reload | Run `hs project upload` |
 | `hs project watch` warning | Deprecated in CLI v8 | Use `hs project dev` |
 | `hs upload` / `hs fetch` not found | CMS commands moved under `hs cms` in v8 | Use `hs cms upload`, etc. |

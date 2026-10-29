@@ -7,6 +7,7 @@
 // - The customer's name comes from the contact record (useCrmProperties).
 // - The location, usual rental, top pick and alternatives come from the
 //   recommendVehicles function.
+// - Create rental writes a Rental Agreement through the createRental function.
 export const MOCK_CUSTOMER = {
   email: "jordan.rivera@example.com",
 };
@@ -19,15 +20,3 @@ export const MOCK_TRIP = {
 };
 
 export const MOCK_INSURANCE_PER_DAY = 15;
-
-// What "Create rental" would write to a Rental Agreement record.
-// Used when you jump straight to the Booked view from the state toggle.
-export const MOCK_BOOKING = {
-  agreementId: "RA-1042",
-  vehicle: { id: "v-101", vehicleName: "2022 Subaru Midsize", dailyPrice: 89 },
-  locationName: "Grass Valley, CA",
-  pickupDate: MOCK_TRIP.pickupDate,
-  returnDate: MOCK_TRIP.returnDate,
-  insurance: true,
-  notes: "",
-};

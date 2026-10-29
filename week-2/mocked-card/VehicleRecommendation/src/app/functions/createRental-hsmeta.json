@@ -1,0 +1,8 @@
+{
+  "uid": "createRental",
+  "type": "app-function",
+  "config": {
+    "entrypoint": "/app/functions/createRental.js",
+    "secretKeys": []
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "uid": "rentalAgreements",
+  "type": "app-function",
+  "config": {
+    "entrypoint": "/app/functions/rentalAgreements.js",
+    "secretKeys": []
+  }
+}

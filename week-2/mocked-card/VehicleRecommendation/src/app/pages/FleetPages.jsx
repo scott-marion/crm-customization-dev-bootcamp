@@ -1,9 +1,10 @@
-import React, { useEffect } from "react";
+import React, { createContext, useContext, useEffect, useState } from "react";
 import {
   Button,
   EmptyState,
   ErrorState,
   Flex,
+  Link,
   LoadingSpinner,
   Statistics,
   StatisticsItem,
@@ -11,21 +12,44 @@ import {
   Text,
   hubspot,
 } from "@hubspot/ui-extensions";
-import { PageBreadcrumbs, PageLink, PageRoutes, PageTitle, createPageRouter, usePageRoute } from "@hubspot/ui-extensions/pages";
+import {
+  PageBreadcrumbs,
+  PageHeader,
+  PageLink,
+  PageRoutes,
+  PageTitle,
+  createPageRouter,
+  usePageRoute,
+} from "@hubspot/ui-extensions/pages";
 import { DataTable } from "hs-uix/datatable";
-import { formatCurrency } from "hs-uix/utils";
+import { formatCurrency, formatDate } from "hs-uix/utils";
 import { useFunction } from "./useFunction";
 
-// Fleet availability: the view across every location, which doesn't fit on a
+// App pages for views across the whole business, which don't fit on a
 // contact card. The card answers "what do I offer this customer?"; these pages
-// answer "where are the cars?".
+// answer "where are the cars?" and "who has one right now?".
 //
 //   /                          every location, its available and total vehicles
 //   /locations/:locationId     one location's vehicles
+//   /rentals                   rental agreements, current ones first, linked to their contact
 //
-// All counting and sorting happens in the fleetAvailability function.
+// Counting, status and sorting happen in the fleetAvailability and
+// rentalAgreements functions.
 
 const STATUS_VARIANT = { Available: "success", Low: "warning", "Sold out": "danger" };
+const RENTAL_VARIANT = { Active: "success", Upcoming: "info", Ended: "default" };
+
+// The account ID, for links to CRM records. Set from the extension context below.
+const PortalId = createContext(null);
+
+const contactUrl = (portalId, contactId) => `https://app.hubspot.com/contacts/${portalId}/record/0-1/${contactId}`;
+
+// "2026-08-01" -> a local date, so it doesn't shift a day in US time zones.
+const parseDay = (value) => {
+  if (!value) return null;
+  const [year, month, day] = value.split("-").map(Number);
+  return new Date(year, month - 1, day);
+};
 
 const toOptions = (values) => [...new Set(values)].sort().map((value) => ({ label: value, value }));
 
@@ -221,6 +245,121 @@ const LocationPage = () => {
   );
 };
 
+// "Current" = active now or starting later; Ended and All are one click away.
+const SHOW_OPTIONS = [
+  { label: "Current", value: "current" },
+  { label: "Active now", value: "Active" },
+  { label: "Upcoming", value: "Upcoming" },
+  { label: "Ended", value: "Ended" },
+];
+
+const RentalAgreementsPage = () => {
+  const portalId = useContext(PortalId);
+  const rentals = useFunction("rentalAgreements");
+  const [filterValues, setFilterValues] = useState({ show: "current" });
+
+  useEffect(() => {
+    rentals.call();
+  }, []);
+
+  const renderBody = () => {
+    if (rentals.status === "error") return <LoadError message={rentals.error} onRetry={() => rentals.call()} />;
+    if (!rentals.data) return <Loading label="Loading rental agreements..." />;
+
+    const { agreements, summary } = rentals.data;
+    const rows = agreements.map((a) => ({
+      ...a,
+      datesLabel:
+        a.startDate || a.endDate
+          ? `${a.startDate ? formatDate(parseDay(a.startDate)) : "--"} – ${a.endDate ? formatDate(parseDay(a.endDate)) : "--"}`
+          : "--",
+      daysLabel: a.days != null ? String(a.days) : "--",
+      priceLabel: a.dailyPrice != null ? `${formatCurrency(a.dailyPrice)}/day` : "--",
+      totalLabel: a.total != null ? formatCurrency(a.total) : "--",
+    }));
+    const columns = [
+      { field: "name", label: "Agreement", sortable: true, width: "min", cellWidth: "min" },
+      {
+        field: "contactName",
+        label: "Contact",
+        sortable: true,
+        renderCell: (value, row) =>
+          row.contactId && portalId ? <Link href={contactUrl(portalId, row.contactId)}>{value}</Link> : <Text>{value}</Text>,
+      },
+      { field: "vehicleName", label: "Vehicle", sortable: true },
+      {
+        field: "datesLabel",
+        label: "Dates",
+        sortable: true,
+        sortComparator: (a, b, rowA, rowB) => String(rowA.startDate).localeCompare(String(rowB.startDate)),
+      },
+      { field: "daysLabel", label: "Days", align: "right", width: "min", cellWidth: "min" },
+      { field: "priceLabel", label: "Daily", align: "right", width: "min", cellWidth: "min" },
+      {
+        field: "totalLabel",
+        label: "Total",
+        align: "right",
+        width: "min",
+        cellWidth: "min",
+        sortable: true,
+        sortComparator: (a, b, rowA, rowB) => (rowA.total ?? 0) - (rowB.total ?? 0),
+      },
+      {
+        field: "status",
+        label: "Status",
+        sortable: true,
+        width: "min",
+        cellWidth: "min",
+        renderCell: (value) => <StatusTag variant={RENTAL_VARIANT[value] ?? "default"}>{value}</StatusTag>,
+      },
+    ];
+
+    return (
+      <Flex direction="column" gap="md">
+        <Statistics>
+          <StatisticsItem label="Active now" number={String(summary.active)} />
+          <StatisticsItem label="Upcoming" number={String(summary.upcoming)} />
+          <StatisticsItem label="Ended" number={String(summary.ended)} />
+        </Statistics>
+        <DataTable
+          data={rows}
+          columns={columns}
+          rowIdField="id"
+          searchFields={["name", "contactName", "vehicleName"]}
+          searchPlaceholder="Search agreement, contact or vehicle"
+          filters={[
+            {
+              name: "show",
+              label: "Show",
+              options: SHOW_OPTIONS,
+              includeAll: true,
+              allLabel: "All",
+              filterFn: (row, value) => (value === "current" ? row.status !== "Ended" : row.status === value),
+            },
+          ]}
+          filterValues={filterValues}
+          onFilterChange={setFilterValues}
+          pageSize={25}
+          emptyTitle="No matching rental agreements"
+          emptyMessage="Nothing matches this filter. Set Show to All to see past rentals."
+          bordered={true}
+        />
+      </Flex>
+    );
+  };
+
+  return (
+    <>
+      <PageBreadcrumbs>
+        <PageBreadcrumbs.PageLink to="/">Fleet availability</PageBreadcrumbs.PageLink>
+        <PageBreadcrumbs.Current>Rental agreements</PageBreadcrumbs.Current>
+      </PageBreadcrumbs>
+      <PageTitle>Rental agreements</PageTitle>
+      {renderBody()}
+    </>
+  );
+};
+
 const NotFoundPage = () => (
   <>
     <PageBreadcrumbs>
@@ -234,12 +373,32 @@ const NotFoundPage = () => (
   </>
 );
 
+// One PageHeader for the whole app (the docs advise against adding or removing it per page).
+const AppLayout = ({ children }) => (
+  <>
+    <PageHeader>
+      <PageHeader.PrimaryAction>
+        <PageHeader.PageLink to="/rentals">Rental agreements</PageHeader.PageLink>
+      </PageHeader.PrimaryAction>
+      <PageHeader.SecondaryActions>
+        <PageHeader.PageLink to="/">Fleet availability</PageHeader.PageLink>
+      </PageHeader.SecondaryActions>
+    </PageHeader>
+    {children}
+  </>
+);
+
 const PageRouter = createPageRouter(
-  <PageRoutes>
+  <PageRoutes layoutComponent={AppLayout}>
     <PageRoutes.IndexRoute id="fleet" component={FleetOverviewPage} />
     <PageRoutes.Route id="location" path="/locations/:locationId" component={LocationPage} />
+    <PageRoutes.Route id="rentals" path="/rentals" component={RentalAgreementsPage} />
     <PageRoutes.AnyRoute id="not-found" component={NotFoundPage} />
   </PageRoutes>
 );
 
-hubspot.extend(() => <PageRouter />);
+hubspot.extend(({ context }) => (
+  <PortalId.Provider value={context.portal.id}>
+    <PageRouter />
+  </PortalId.Provider>
+));
