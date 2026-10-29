@@ -1,0 +1,7 @@
+{
+  "uid": "fleet_pages",
+  "type": "page",
+  "config": {
+    "entrypoint": "/app/pages/FleetPages.jsx"
+  }
+}

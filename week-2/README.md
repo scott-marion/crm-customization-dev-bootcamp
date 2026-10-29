@@ -11,7 +11,7 @@ AI can write UI extension code faster than you can type it. What it can't do is 
 | [`problem-brief.md`](problem-brief.md) | Template for the problem brief, plus a filled example for the rental rep |
 | [`build-plan.md`](build-plan.md) | Checklist that turns an approved mockup into a build plan (this becomes your Week 3 prompt) |
 | [`prompts.md`](prompts.md) | The Claude Code prompts for each stage, ready to copy |
-| [`mocked-card/`](mocked-card/VehicleRecommendation) | Started as a static card with hardcoded data and no functions: what a good mockup looks like. In this fork it's now partly real (see the end of step 4). |
+| [`mocked-card/`](mocked-card/VehicleRecommendation) | Started as a static card with hardcoded data and no functions: what a good mockup looks like. In this fork it's now partly real (see the end of step 4), and the project also has a Fleet availability app page (Week 4). |
 | [`one-shot/`](one-shot/) | A card Claude Code built from one prompt with no design work. Compare it with the mockup. |
 | [`../.claude/skills/hubspot-card-design`](../.claude/skills/hubspot-card-design/SKILL.md) | Claude Code skill with HubSpot's card design rules and the `hs-uix` components. Use it whenever you mock or build a card. |
 
@@ -81,6 +81,13 @@ Build a **static** card: hardcoded data, HubSpot UI components and [`hs-uix`](ht
 - The Week 3 slice: the `recommendVehicles` function ([`src/app/functions/`](mocked-card/VehicleRecommendation/src/app/functions)) supplies the rental history ("Usually rents"), the nearest location to a pickup zip (prefilled from the contact's zip), the top pick and the alternatives. Top picks are priced at or above the location's median. With history, they lean to the class and price of the customer's priciest past rental. The app now needs `crm.objects.custom.read`.
 
 Trip dates, insurance, the confirmation email and the booking itself are still mocked.
+
+The same project has a Week 4 app page, **Fleet availability** ([`src/app/pages/`](mocked-card/VehicleRecommendation/src/app/pages)). Fleet-wide questions don't fit on a contact card, so they get a full page:
+
+- `/` lists every location with its available and total vehicles and a status (Available, Low at 2 or fewer, Sold out), with search and state/status filters.
+- `/locations/:locationId` shows one location's vehicles (class, VIN, odometer, daily price, available or rented) and its median available price.
+
+The `fleetAvailability` function does the counting and sorting, so the page only renders. It needs no new scopes. Open the page from the Marketplace menu (recently visited apps) or at `https://app.hubspot.com/app/{hubId}/{appId}`.
 
 Run `hs project dev`, open a contact record, and put the card in front of the user. Card edits hot-reload, so you can change the design while they watch. Do at least two rounds of changes based on what they say.
 

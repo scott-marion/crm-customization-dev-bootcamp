@@ -1,0 +1,8 @@
+{
+  "uid": "fleetAvailability",
+  "type": "app-function",
+  "config": {
+    "entrypoint": "/app/functions/fleetAvailability.js",
+    "secretKeys": []
+  }
+}
